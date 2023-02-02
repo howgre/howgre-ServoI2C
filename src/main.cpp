@@ -1,11 +1,14 @@
 
 #include <Arduino.h>
 #include <Adafruit_PWMServoDriver.h>
-#include <string.h>
+
 
 //Create object to represent PCA9685 at default I2C address
-Adafruit_PWMServoDriver pca9685 = Adafruit_PWMServoDriver(0x40);
-Adafruit_PWMServoDriver pca96852 = Adafruit_PWMServoDriver(0x41);
+Adafruit_PWMServoDriver pwms[] {
+  Adafruit_PWMServoDriver(0x40),
+  Adafruit_PWMServoDriver(0x41) 
+};
+const size_t pwms_count = sizeof(pwms)/sizeof(Adafruit_PWMServoDriver);
 
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
 
@@ -16,63 +19,102 @@ Adafruit_PWMServoDriver pca96852 = Adafruit_PWMServoDriver(0x41);
 #define SERVOMIN 90 // Minimum value
 #define SERVOMAX 500 // Maximum value
 
-// Define servo motor connections (expand as required)
-#define SERP1 0   // Pan Servo Motor 1 o'clock on connector 1
-#define SERP2  1  // Pan Servo motor 2 o'clock on connector 2
-#define SERP3  2  // Pan Servo motor 3 o'clock on connector 3
-#define SERP4 3   // Pan Servo motor 4 o'clock on connector 4
-#define SERP5 4   // Pan Servo motor 5 o'clock on connector 5
-#define SERP6 5   // Pan Servo motor 6 o'clock on connector 6
-#define SERP7 6   // Pan Servo motor 7 o'clock on connector 7
-#define SERP8 7   // Pan Servo motor 8 o'clock on connector 8
-#define SERP9 8   // Pan Servo motor 9 o'clock on connector 9
-#define SERP10 9   // Pan Servo motor 10 o'clock on connector 10
-#define SERP11 10   // Pan Servo motor 11 o'clock on connector 11
-#define SERP12 11   // Pan Servo motor 12 o'clock on conncetor 12
+
+//restricts the limits of travel
+int maxPanAngle[] = {180, 90, 45, 135};
+const size_t maxPanAngle_count = sizeof(maxPanAngle)/sizeof(maxPanAngle[0]);
+
+int minPanAngle[] = {0, 90, 45, 135};
+const size_t minPanAngle_count = sizeof(minPanAngle)/sizeof(minPanAngle[0]);
+
+// Following code is mine to arrange arrays
+int motorNumber = 0; // Not an array since it will be incremented in a for loop
+
+int arrayPeriod[] =   {0, 50, 100, 500} ;
+int arrayPosition[] = {0, 0,  0,  0};
 
 
-#define SERT1 0   // Tilt Servo Motor 1 o'clock on connector 1
-#define SERT2  1  // Tilt Servo motor 2 o'clock on connector 2
-#define SERT3  2  // Tilt Servo motor 3 o'clock on connector 3
-#define SERT4 3   // Tilt Servo motor 4 o'clock on connector 4
-#define SERT5 4   // Tilt Servo motor 5 o'clock on connector 5
-#define SERT6 5   // Tilt Servo motor 6 o'clock on connector 6
-#define SERT7 6   // Tilt Servo motor 7 o'clock on connector 7
-#define SERT8 7   // Tilt Servo motor 8 o'clock on connector 8
-#define SERT9 8   // Tilt Servo motor 9 o'clock on connector 9
-#define SERT10 9   // Tilt Servo motor 10 o'clock on connector 10
-#define SERT11 10   // Tilt Servo motor 11 o'clock on connector 11
-#define SERT12 11   // Tilt Servo motor 12 o'clock on conncetor 12
-
-
-
-
-
-
-long previousMillis = 0;
-long interval = 10000;
-
-int posDegrees = 0;
-
-int posDelta = 1;
-
-// timestamp
-uint32_t ts = 0;
-
-uint32_t td = 0;  //time delay for motion
-  int pwm0 = map(posDegrees, 0, 180, SERVOMIN, SERVOMAX);
-void calibrate() {
-  for(int i = 0 ; i < 10 ; i++) {
-  posDegrees = 0;
-  pca9685.setPWM(SERP1, 0, pwm0);
-  delay(1000);
-  posDegrees = 180;
-  pca9685.setPWM(SERP1, 0, pwm0);
-  delay(1000);
+void servo_fn_pan(int& i, int& delta) {
+  if(i+delta>maxPanAngle[0] || i+delta<minPanAngle[0]) {
+    delta=-delta;
   }
-
+  i+=delta;
 }
 
+/*
+void servo_fn_tilt(int& i, int& delta) {
+  if(i+delta<minPanAngle[2] || i+delta>maxPanAngle[3]) {
+    delta=-delta;
+  }
+  i+=delta;
+}
+*/
+typedef void(*servo_fn)(int& i,int& delta);
+
+struct servo_entry {
+  // the id of the servo, 0-31
+  int id;
+  
+  // the function used to update i/position
+  servo_fn fn;
+  
+  // the period in ms between updating the position
+  // This varies the speed of the motor
+  int period;
+  
+  // internal timestamp
+  uint32_t ts;
+  
+  // the position indicator
+  int i;
+  
+  // the delta/step for each position movement can be pos or neg
+  int delta;
+};
+
+
+
+servo_entry servos[] {
+  {0,servo_fn_pan, arrayPeriod[1],0,90,1},
+  {1,servo_fn_pan,arrayPeriod[1],0,90,-1},
+  {2,servo_fn_pan,arrayPeriod[1],0,90,1},
+  {3,servo_fn_pan,arrayPeriod[1],0,90,-1},
+  
+  {4,servo_fn_pan,arrayPeriod[1],0,135,1},
+  {5,servo_fn_pan, arrayPeriod[1],0,135,-1},
+  {6,servo_fn_pan, arrayPeriod[1],0,135,1},
+  {7,servo_fn_pan, arrayPeriod[1],0,135,-1},
+  
+  //{8,servo_fn_pan, arrayPeriod[1],0,135,1},
+  //{9,servo_fn_pan, arrayPeriod[1],0,135,1},
+  //{10,servo_fn_pan, arrayPeriod[1],0,135,1},
+  //{11,servo_fn_pan, arrayPeriod[1],0,135,1},
+
+  //{12,servo_fn_pan, arrayPeriod[3],0,135,1},
+  //{13,servo_fn_pan, arrayPeriod[3],0,135,1},
+  //{14,servo_fn_pan, arrayPeriod[3],0,135,1},
+  //{15,servo_fn_pan, arrayPeriod[3],0,135,1},
+
+  {16,servo_fn_pan, arrayPeriod[0],0,135,1},
+  {17,servo_fn_pan, arrayPeriod[0],0,135,1},
+  {18,servo_fn_pan, arrayPeriod[1],0,135,1},
+  {19,servo_fn_pan, arrayPeriod[1],0,135,1},
+  
+  {20,servo_fn_pan, arrayPeriod[2],0,90,1},
+  {21,servo_fn_pan, arrayPeriod[2],0,90,1},
+  {22,servo_fn_pan, arrayPeriod[3],0,90,1},
+  {23,servo_fn_pan, arrayPeriod[3],0,90,1}
+  
+  //{23,servo_fn_tilt,50,0,180,0}
+};
+
+
+
+const size_t servos_count = sizeof(servos)/sizeof(servo_entry);
+
+
+uint32_t ts = 0;  //time stamp for changing motions
+int state = 0;
 void setup() {
 
   Serial.begin(115200);
@@ -80,73 +122,51 @@ void setup() {
   // Print to monitor
   Serial.println("PCA9685 Servo Test");
 
-  // Initialise PCA9685
-  pca9685.begin();
-  pca96852.begin();
-
-  //set PWM Frequency to 50Hz
-  pca9685.setPWMFreq(SERVO_FREQ);
-  pca96852.setPWMFreq(SERVO_FREQ);
-
+  // Initialise PCA9685s
+  for(int i = 0;i<pwms_count;++i) {
+    pwms[i].begin();
+    pwms[i].setPWMFreq(SERVO_FREQ);
+  }
+  
 }
 
 void loop() {
-  //calibrate();
-  
-  // only print every 100 millis
-  if(millis()>ts+100) {
+  if(millis()>ts+10*1000) {
     ts = millis();
-    // Print to serial monitor
-    Serial.print("Pos degrees = ");
-    Serial.println(posDegrees);
+    switch(state) {
+      case 0:
+      Serial.println("First change");
+      // first change
+      
+      servos[0].fn = servo_fn_pan;
+      servos[0].i = 90;
+      ++state;
+      break;
+      
+      
+      case 1:
+      //Serial.println("Second change");
+      // second change
+      //servos[0].fn = servo_fn_pan;
+      //servos[0].i = 0;
+      //++state;
+      break;
+      
+      default:
+        Serial.println("Reset state");
+        //state = 0;
+        break; 
+    }
   }
-  int pwm0 = map(posDegrees, 0, 180, SERVOMIN, SERVOMAX);
-  int pwm0_rev = map(180-posDegrees, 0, 180, SERVOMIN, SERVOMAX);
-  
-  //int pwm2 = map(posDegrees, 180, 0, SERVOMIN, SERVOMAX);
-  //int pwm2_rev = map(180-posDegrees, 0, 180, SERVOMIN, SERVOMAX);
-  
-  
-  pca9685.setPWM(SERP1, 0, pwm0);
-  pca9685.setPWM(SERP2, 0, pwm0_rev);
-  pca9685.setPWM(SERP3, 0, pwm0);
-  pca9685.setPWM(SERP4, 0, pwm0_rev);
-  pca9685.setPWM(SERP5, 0, pwm0);
-  pca9685.setPWM(SERP6, 0, pwm0_rev);
-  pca9685.setPWM(SERP7, 0, pwm0);
-  pca9685.setPWM(SERP8, 0, pwm0_rev);
-
-  //myBrief test
-  pca96852.setPWM(SERT1, 0, pwm0);
-  pca96852.setPWM(SERT4, 0, 30);
-  //end of myBrief Test
-
-
-   // delay(10);
-  if(millis()>td+10) {
-    td = millis();
-    // 
-    
-  
-  //Attempt to narrow the start postion
-  if(posDegrees<1) {
-    posDegrees=1;
-  }
-  
-  // increment posDegrees as necessary
-  if(posDegrees+posDelta>180) {
-    posDelta = -posDelta;
-  } else if(posDegrees+posDelta<1) {
-    posDelta = -posDelta;
-  }
-  
-  posDegrees += posDelta;
-  
-  
+  for(int i = 0;i<servos_count;++i) {
+    servo_entry& e = servos[i];
+    if(millis()>=e.ts+e.period) {
+      e.ts = millis();
+      int duty = map(e.i,0,180,SERVOMIN,SERVOMAX);
+      pwms[e.id/16].setPWM(e.id%16,0,duty);
+      Serial.printf("id: %d, i: %d\n",e.id,e.i);
+      e.fn(e.i,e.delta);
+    }
   }
   //delay(1000);
-  
-  
-  
-  
 }
