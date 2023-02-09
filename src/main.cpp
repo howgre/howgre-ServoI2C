@@ -9,6 +9,9 @@ Adafruit_PWMServoDriver pwms[] {
   Adafruit_PWMServoDriver(0x41) 
 };
 const size_t pwms_count = sizeof(pwms)/sizeof(Adafruit_PWMServoDriver);
+int arrayVal = 0;
+
+
 
 #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
 
@@ -21,34 +24,35 @@ const size_t pwms_count = sizeof(pwms)/sizeof(Adafruit_PWMServoDriver);
 
 
 //restricts the limits of travel
-int maxPanAngle[] = {180, 90, 45, 135};
+int maxPanAngle[] = {180, 120, 180, 150};
 const size_t maxPanAngle_count = sizeof(maxPanAngle)/sizeof(maxPanAngle[0]);
 
-int minPanAngle[] = {0, 90, 45, 135};
+int minPanAngle[] = {0, 60, 10, 10};
 const size_t minPanAngle_count = sizeof(minPanAngle)/sizeof(minPanAngle[0]);
 
 // Following code is mine to arrange arrays
-int motorNumber = 0; // Not an array since it will be incremented in a for loop
-
-int arrayPeriod[] =   {0, 50, 100, 500} ;
-int arrayPosition[] = {0, 0,  0,  0};
+int arrayPeriod[] =   {100, 10, 0, 50, 25} ;
+int arrayPosition[] = {30, 60,  90,  150};
 
 
 void servo_fn_pan(int& i, int& delta) {
-  if(i+delta>maxPanAngle[0] || i+delta<minPanAngle[0]) {
+  
+  if(i+delta>maxPanAngle[arrayVal] || i+delta<minPanAngle[arrayVal]) {
     delta=-delta;
   }
   i+=delta;
 }
 
-/*
+
 void servo_fn_tilt(int& i, int& delta) {
-  if(i+delta<minPanAngle[2] || i+delta>maxPanAngle[3]) {
+  
+  
+  if(i+delta<minPanAngle[arrayVal] || i+delta>maxPanAngle[arrayVal]) {
     delta=-delta;
   }
   i+=delta;
 }
-*/
+
 typedef void(*servo_fn)(int& i,int& delta);
 
 struct servo_entry {
@@ -69,21 +73,21 @@ struct servo_entry {
   int i;
   
   // the delta/step for each position movement can be pos or neg
+  // This should usually be either -1 or 1, 0 will produce a stop
   int delta;
 };
 
 
 
 servo_entry servos[] {
-  {0,servo_fn_pan, arrayPeriod[1],0,90,1},
-  {1,servo_fn_pan,arrayPeriod[1],0,90,-1},
-  {2,servo_fn_pan,arrayPeriod[1],0,90,1},
-  {3,servo_fn_pan,arrayPeriod[1],0,90,-1},
-  
-  {4,servo_fn_pan,arrayPeriod[1],0,135,1},
-  {5,servo_fn_pan, arrayPeriod[1],0,135,-1},
-  {6,servo_fn_pan, arrayPeriod[1],0,135,1},
-  {7,servo_fn_pan, arrayPeriod[1],0,135,-1},
+  {0,servo_fn_pan, arrayPeriod[arrayVal],0,90,1},
+  {1,servo_fn_pan,arrayPeriod[arrayVal],0,90,1},
+  {2,servo_fn_pan,arrayPeriod[arrayVal],0,90,1},
+  {3,servo_fn_pan,arrayPeriod[arrayVal],0,90,1},
+  {4,servo_fn_pan,arrayPeriod[arrayVal],0,90,1},
+  {5,servo_fn_pan, arrayPeriod[arrayVal],0,90,1},
+  {6,servo_fn_pan, arrayPeriod[arrayVal],0,90,1},
+  {7,servo_fn_pan, arrayPeriod[arrayVal],0,90,1},
   
   //{8,servo_fn_pan, arrayPeriod[1],0,135,1},
   //{9,servo_fn_pan, arrayPeriod[1],0,135,1},
@@ -95,15 +99,15 @@ servo_entry servos[] {
   //{14,servo_fn_pan, arrayPeriod[3],0,135,1},
   //{15,servo_fn_pan, arrayPeriod[3],0,135,1},
 
-  {16,servo_fn_pan, arrayPeriod[0],0,135,1},
-  {17,servo_fn_pan, arrayPeriod[0],0,135,1},
-  {18,servo_fn_pan, arrayPeriod[1],0,135,1},
-  {19,servo_fn_pan, arrayPeriod[1],0,135,1},
+  {16, servo_fn_tilt, arrayPeriod[arrayVal],0,90,1},
+  {17,servo_fn_tilt, arrayPeriod[arrayVal],0,90,1},
+  {18,servo_fn_pan, arrayPeriod[arrayVal],0,90,1},
+  {19,servo_fn_pan, arrayPeriod[arrayVal],0,90,1},
   
-  {20,servo_fn_pan, arrayPeriod[2],0,90,1},
-  {21,servo_fn_pan, arrayPeriod[2],0,90,1},
-  {22,servo_fn_pan, arrayPeriod[3],0,90,1},
-  {23,servo_fn_pan, arrayPeriod[3],0,90,1}
+  {20,servo_fn_tilt, arrayPeriod[arrayVal],0,90,1},
+  {21,servo_fn_tilt, arrayPeriod[arrayVal],0,90,1},
+  {22,servo_fn_tilt, arrayPeriod[arrayVal],0,90,1},
+  {23,servo_fn_tilt, arrayPeriod[1],0,90,1}
   
   //{23,servo_fn_tilt,50,0,180,0}
 };
@@ -115,6 +119,9 @@ const size_t servos_count = sizeof(servos)/sizeof(servo_entry);
 
 uint32_t ts = 0;  //time stamp for changing motions
 int state = 0;
+
+
+
 void setup() {
 
   Serial.begin(115200);
@@ -131,15 +138,18 @@ void setup() {
 }
 
 void loop() {
-  if(millis()>ts+10*1000) {
+  if(millis()>ts + 10*1000) {
     ts = millis();
     switch(state) {
       case 0:
       Serial.println("First change");
       // first change
-      
+      arrayVal = 0;
       servos[0].fn = servo_fn_pan;
-      servos[0].i = 90;
+      for (int j = 23; j>=0 ; j--){
+      servos[j].i = 90;
+      }
+      
       ++state;
       break;
       
@@ -147,14 +157,21 @@ void loop() {
       case 1:
       //Serial.println("Second change");
       // second change
-      //servos[0].fn = servo_fn_pan;
-      //servos[0].i = 0;
-      //++state;
+      
+      arrayVal = 1;
+      
+      servos[0].fn = servo_fn_tilt;
+      //servos[0].i = 90;
+     for (int j = 23; j>=0 ; j--){
+      servos[j].i = 90;
+      }
+           
+      ++state;
       break;
       
       default:
         Serial.println("Reset state");
-        //state = 0;
+        state = 0;
         break; 
     }
   }
